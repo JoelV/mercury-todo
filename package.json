@@ -1,0 +1,33 @@
+{
+  "name": "mercury-todo",
+  "version": "0.0.0",
+  "description": "A simple todo app using mercury.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "watch": "watchify index.js -o bundle.js",
+    "build": "browserify index.js -o bundle.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/JoelV/mercury-todo.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/JoelV/mercury-todo/issues"
+  },
+  "homepage": "https://github.com/JoelV/mercury-todo",
+  "dependencies": {
+    "underscore": "^1.7.0",
+    "uuid": "^2.0.1",
+    "mercury": "^10.0.1",
+    "nano": "^6.0.2",
+    "express": "^4.10.4",
+    "body-parser": "^1.9.3",
+    "browser-request": "^0.3.3"
+  },
+  "devDependencies": {
+    "browserify": "^8.0.2"
+  }
+}
