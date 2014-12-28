@@ -14,6 +14,8 @@ npm install
 npm run build
 ```
 
+Create a database called todos in Couchdb
+
 run
 ```
 npm start
