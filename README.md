@@ -9,6 +9,7 @@ A simple todo app using mercury.
 
 build
 ```
+npm install -g browserify
 npm install
 npm run build
 ```
