@@ -1,14 +1,21 @@
 # Mercury Todo App
 
+
 A simple todo app using mercury.
+
+### Dependencies
+- Couchdb
+- Nodejs
 
 build
 ```
-browserify index.js -o bundle.js
+npm install
+npm run build
 ```
 
 run
 ```
-st -nc
+npm start
 ```
-Then navigate to http://localhost:1337/index.html
+
+Goto localhost:3000

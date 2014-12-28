@@ -1,113 +1,715 @@
-(function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
+(function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({"/home/action/.parts/lib/node_modules/watchify/node_modules/browserify/node_modules/browser-resolve/empty.js":[function(require,module,exports){
+
+},{}],"/home/action/.parts/lib/node_modules/watchify/node_modules/browserify/node_modules/process/browser.js":[function(require,module,exports){
+// shim for using process in browser
+
+var process = module.exports = {};
+
+process.nextTick = (function () {
+    var canSetImmediate = typeof window !== 'undefined'
+    && window.setImmediate;
+    var canPost = typeof window !== 'undefined'
+    && window.postMessage && window.addEventListener
+    ;
+
+    if (canSetImmediate) {
+        return function (f) { return window.setImmediate(f) };
+    }
+
+    if (canPost) {
+        var queue = [];
+        window.addEventListener('message', function (ev) {
+            var source = ev.source;
+            if ((source === window || source === null) && ev.data === 'process-tick') {
+                ev.stopPropagation();
+                if (queue.length > 0) {
+                    var fn = queue.shift();
+                    fn();
+                }
+            }
+        }, true);
+
+        return function nextTick(fn) {
+            queue.push(fn);
+            window.postMessage('process-tick', '*');
+        };
+    }
+
+    return function nextTick(fn) {
+        setTimeout(fn, 0);
+    };
+})();
+
+process.title = 'browser';
+process.browser = true;
+process.env = {};
+process.argv = [];
+
+function noop() {}
+
+process.on = noop;
+process.addListener = noop;
+process.once = noop;
+process.off = noop;
+process.removeListener = noop;
+process.removeAllListeners = noop;
+process.emit = noop;
+
+process.binding = function (name) {
+    throw new Error('process.binding is not supported');
+}
+
+// TODO(shtylman)
+process.cwd = function () { return '/' };
+process.chdir = function (dir) {
+    throw new Error('process.chdir is not supported');
+};
+
+},{}],"/home/action/play/mercury-todo/index.js":[function(require,module,exports){
 var hg = require('mercury');
 var h = require('mercury').h;
 var _ = require('underscore');
 var uuid = require('uuid');
-var temp = [
-  {
-    id: 1,
-    task: 'foo'
+var request = require('browser-request');
 
-  },
-  {
-    id: 2,
-    task: 'bar'
-
-  },
-  {
-    id: 3,
-    task: 'baz'
-
-  }
-];
-function App() {
-  var state = hg.struct({
-    addTodo: hg.value(''),
-    handles: hg.value(null),
-    todos: hg.array([])
-  });
-
-  state.handles.set(hg.handles({
-    change: function(state, data) {
-      state.addTodo.set(data.addTodo);
-    },
-    addToList: function(state) {
-      var listObj = hg.struct({
-        id: uuid.v4(),
-        task: hg.value(state.addTodo())
-      });
-      state.todos.push(listObj);
-      state.addTodo.set('');
-    },
-    removeFromList: function(state, data) {
-      console.log(data);
-      //var list = state.todos();
-      var index;
-      for(var i = 0; i < state.todos.getLength(); i++) {
-        var item = state.todos.get(i);
-        if(item.id === data.id) {
-          index = i;
-          break;
-        }
-      }
-      state.todos.splice(index,1);
+function getTodos(cb) {
+  request({
+    method: 'GET',
+    url: '/api/todos',
+    json: true,
+  }, function(e, r, b) {
+    if(e || r.statusCode < 200 || r.statusCode >= 400) {
+      console.log('something went wrong');
+      cb(e);
     }
-  }, state));
-
-  return state;
-}
-function inputBox(value, sink) {
-  return h('input', {
-    value: value,
-    name: 'addTodo',
-    type: 'text',
-    placeholder: 'Add todo',
-    'ev-event': hg.changeEvent(sink)
+    //b is an array of todo docs from couchdb
+    cb(null, b);
   });
+ 
 }
+getTodos(function(e, todos) {
+  
+  var initialTodos = hg.array([]);
+  for(var i = 0; i < todos.length; i++) {
+    initialTodos.push(hg.struct({
+      id: hg.value(todos[i]._id),
+      task: hg.value(todos[i].task)
+    }));
+  }
 
-function addButton(state) {
-  return h('button.btn.btn-primary', { 
-    style: { 'margin-left': '5px' },
-    'ev-click': hg.event(state.handles.addToList)
-  }, 'Add');
-}
-
-function deleteButton(state, id) {
-  return h('button.btn.btn-xs.btn-danger.pull-right', {
-    'ev-click': hg.event(state.handles.removeFromList, { id: id })
-  },'Delete'); 
-}
-
-function list(state, todos) {
-  return h('ul.list-group', 
-    _.map(todos, function(todo) {
-      return h('li.list-group-item', [
-        todo.task,
-        deleteButton(state, todo.id) 
+  function App() {
+    var state = hg.state({
+      addTodo: hg.value(''),
+      handles: hg.value(null),
+      todos: initialTodos 
+    });
+    console.log('foo');
+    state.handles.set(hg.handles({
+      change: function(state, data) {
+        state.addTodo.set(data.addTodo);
+      },
+      addToList: function(state) {
+        request({
+          method: 'POST',
+          url: '/api/todos/add', 
+          body: { task: state.addTodo() },
+          json: true
+        }, function(e, r, b) {
+          if(e || (r.statusCode < 200 || r.statusCode >= 400)) {
+            return console.log('something went wrong');
+          }
+          var listObj = hg.struct({
+            id: b.id,
+            task: hg.value(state.addTodo())
+          });
+          state.todos.push(listObj);
+          state.addTodo.set('');
+        }); 
+      },
+      removeFromList: function(state, data) {
+        var index;
+        for(var i = 0; i < state.todos.getLength(); i++) {
+          var item = state.todos.get(i);
+          if(item.id === data.id) {
+            index = i;
+            break;
+          }
+        }
+        request({
+          method: 'DELETE',
+          url: '/api/todos/' + data.id
+        }, function(e, r, b) {
+          if(e || (r.statusCode < 200 || r.statusCode >= 400)) {
+            return console.log('something went wrong');
+          } 
+          console.log(b);
+          state.todos.splice(index,1);
+        });
+      }
+    }, state));
+  
+    return state;
+  }
+  
+  function inputBox(value, sink) {
+    return h('input', {
+      value: value,
+      name: 'addTodo',
+      type: 'text',
+      placeholder: 'Add todo',
+      'ev-event': hg.changeEvent(sink)
+    });
+  }
+  
+  function addButton(state) {
+    return h('button.btn.btn-primary', { 
+      style: { 'margin-left': '5px' },
+      'ev-click': hg.event(state.handles.addToList)
+    }, 'Add');
+  }
+  
+  function deleteButton(state, id) {
+    return h('button.btn.btn-xs.btn-danger.pull-right', {
+      'ev-click': hg.event(state.handles.removeFromList, { id: id })
+    },'Delete'); 
+  }
+  
+  function buildItems(state) {
+    var items = [];
+    for(var i = 0; i < state.todos.length; i++) {
+      var el = h('li.list-group-item', [
+        state.todos[i].task,
+        deleteButton(state, state.todos[i].id)
       ]);
-    })
-  );
-}
-
-App.render = function render(state) {
-  return h('div.container', [
-    h('div.row', [ 
-      h('div.col-md-3', [
-        inputBox(state.addTodo, state.handles.change),
-        addButton(state)
+      items.push(el);
+    }
+    return items;
+  }
+  
+  function list(state) {
+    return h('ul.list-group', buildItems(state));
+  }
+  
+  App.render = function render(state) {
+    console.log('bar');
+    return h('div.container', [
+      h('div.row', [ 
+        h('div.col-md-3', [
+          inputBox(state.addTodo, state.handles.change),
+          addButton(state)
+        ])
+      ]),
+      h('div.row', [
+        h('div.col-md-6', list(state))
       ])
-    ]),
-    h('div.row', [
-      h('div.col-md-6', list(state, state.todos))
-    ])
-  ]);
+    ]);
+  }
+  
+  hg.app(document.body, App(), App.render);
+});
+
+},{"browser-request":"/home/action/play/mercury-todo/node_modules/browser-request/index.js","mercury":"/home/action/play/mercury-todo/node_modules/mercury/index.js","underscore":"/home/action/play/mercury-todo/node_modules/underscore/underscore.js","uuid":"/home/action/play/mercury-todo/node_modules/uuid/uuid.js"}],"/home/action/play/mercury-todo/node_modules/browser-request/index.js":[function(require,module,exports){
+// Browser Request
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// UMD HEADER START 
+(function (root, factory) {
+    if (typeof define === 'function' && define.amd) {
+        // AMD. Register as an anonymous module.
+        define([], factory);
+    } else if (typeof exports === 'object') {
+        // Node. Does not work with strict CommonJS, but
+        // only CommonJS-like enviroments that support module.exports,
+        // like Node.
+        module.exports = factory();
+    } else {
+        // Browser globals (root is window)
+        root.returnExports = factory();
+  }
+}(this, function () {
+// UMD HEADER END
+
+var XHR = XMLHttpRequest
+if (!XHR) throw new Error('missing XMLHttpRequest')
+request.log = {
+  'trace': noop, 'debug': noop, 'info': noop, 'warn': noop, 'error': noop
 }
 
-hg.app(document.body, App(), App.render);
-},{"mercury":2,"underscore":119,"uuid":121}],2:[function(require,module,exports){
+var DEFAULT_TIMEOUT = 3 * 60 * 1000 // 3 minutes
+
+//
+// request
+//
+
+function request(options, callback) {
+  // The entry-point to the API: prep the options object and pass the real work to run_xhr.
+  if(typeof callback !== 'function')
+    throw new Error('Bad callback given: ' + callback)
+
+  if(!options)
+    throw new Error('No options given')
+
+  var options_onResponse = options.onResponse; // Save this for later.
+
+  if(typeof options === 'string')
+    options = {'uri':options};
+  else
+    options = JSON.parse(JSON.stringify(options)); // Use a duplicate for mutating.
+
+  options.onResponse = options_onResponse // And put it back.
+
+  if (options.verbose) request.log = getLogger();
+
+  if(options.url) {
+    options.uri = options.url;
+    delete options.url;
+  }
+
+  if(!options.uri && options.uri !== "")
+    throw new Error("options.uri is a required argument");
+
+  if(typeof options.uri != "string")
+    throw new Error("options.uri must be a string");
+
+  var unsupported_options = ['proxy', '_redirectsFollowed', 'maxRedirects', 'followRedirect']
+  for (var i = 0; i < unsupported_options.length; i++)
+    if(options[ unsupported_options[i] ])
+      throw new Error("options." + unsupported_options[i] + " is not supported")
+
+  options.callback = callback
+  options.method = options.method || 'GET';
+  options.headers = options.headers || {};
+  options.body    = options.body || null
+  options.timeout = options.timeout || request.DEFAULT_TIMEOUT
+
+  if(options.headers.host)
+    throw new Error("Options.headers.host is not supported");
+
+  if(options.json) {
+    options.headers.accept = options.headers.accept || 'application/json'
+    if(options.method !== 'GET')
+      options.headers['content-type'] = 'application/json'
+
+    if(typeof options.json !== 'boolean')
+      options.body = JSON.stringify(options.json)
+    else if(typeof options.body !== 'string')
+      options.body = JSON.stringify(options.body)
+  }
+  
+  //BEGIN QS Hack
+  var serialize = function(obj) {
+    var str = [];
+    for(var p in obj)
+      if (obj.hasOwnProperty(p)) {
+        str.push(encodeURIComponent(p) + "=" + encodeURIComponent(obj[p]));
+      }
+    return str.join("&");
+  }
+  
+  if(options.qs){
+    var qs = (typeof options.qs == 'string')? options.qs : serialize(options.qs);
+    if(options.uri.indexOf('?') !== -1){ //no get params
+        options.uri = options.uri+'&'+qs;
+    }else{ //existing get params
+        options.uri = options.uri+'?'+qs;
+    }
+  }
+  //END QS Hack
+  
+  //BEGIN FORM Hack
+  var multipart = function(obj) {
+    //todo: support file type (useful?)
+    var result = {};
+    result.boundry = '-------------------------------'+Math.floor(Math.random()*1000000000);
+    var lines = [];
+    for(var p in obj){
+        if (obj.hasOwnProperty(p)) {
+            lines.push(
+                '--'+result.boundry+"\n"+
+                'Content-Disposition: form-data; name="'+p+'"'+"\n"+
+                "\n"+
+                obj[p]+"\n"
+            );
+        }
+    }
+    lines.push( '--'+result.boundry+'--' );
+    result.body = lines.join('');
+    result.length = result.body.length;
+    result.type = 'multipart/form-data; boundary='+result.boundry;
+    return result;
+  }
+  
+  if(options.form){
+    if(typeof options.form == 'string') throw('form name unsupported');
+    if(options.method === 'POST'){
+        var encoding = (options.encoding || 'application/x-www-form-urlencoded').toLowerCase();
+        options.headers['content-type'] = encoding;
+        switch(encoding){
+            case 'application/x-www-form-urlencoded':
+                options.body = serialize(options.form).replace(/%20/g, "+");
+                break;
+            case 'multipart/form-data':
+                var multi = multipart(options.form);
+                //options.headers['content-length'] = multi.length;
+                options.body = multi.body;
+                options.headers['content-type'] = multi.type;
+                break;
+            default : throw new Error('unsupported encoding:'+encoding);
+        }
+    }
+  }
+  //END FORM Hack
+
+  // If onResponse is boolean true, call back immediately when the response is known,
+  // not when the full request is complete.
+  options.onResponse = options.onResponse || noop
+  if(options.onResponse === true) {
+    options.onResponse = callback
+    options.callback = noop
+  }
+
+  // XXX Browsers do not like this.
+  //if(options.body)
+  //  options.headers['content-length'] = options.body.length;
+
+  // HTTP basic authentication
+  if(!options.headers.authorization && options.auth)
+    options.headers.authorization = 'Basic ' + b64_enc(options.auth.username + ':' + options.auth.password);
+
+  return run_xhr(options)
+}
+
+var req_seq = 0
+function run_xhr(options) {
+  var xhr = new XHR
+    , timed_out = false
+    , is_cors = is_crossDomain(options.uri)
+    , supports_cors = ('withCredentials' in xhr)
+
+  req_seq += 1
+  xhr.seq_id = req_seq
+  xhr.id = req_seq + ': ' + options.method + ' ' + options.uri
+  xhr._id = xhr.id // I know I will type "_id" from habit all the time.
+
+  if(is_cors && !supports_cors) {
+    var cors_err = new Error('Browser does not support cross-origin request: ' + options.uri)
+    cors_err.cors = 'unsupported'
+    return options.callback(cors_err, xhr)
+  }
+
+  xhr.timeoutTimer = setTimeout(too_late, options.timeout)
+  function too_late() {
+    timed_out = true
+    var er = new Error('ETIMEDOUT')
+    er.code = 'ETIMEDOUT'
+    er.duration = options.timeout
+
+    request.log.error('Timeout', { 'id':xhr._id, 'milliseconds':options.timeout })
+    return options.callback(er, xhr)
+  }
+
+  // Some states can be skipped over, so remember what is still incomplete.
+  var did = {'response':false, 'loading':false, 'end':false}
+
+  xhr.onreadystatechange = on_state_change
+  xhr.open(options.method, options.uri, true) // asynchronous
+  if(is_cors)
+    xhr.withCredentials = !! options.withCredentials
+  xhr.send(options.body)
+  return xhr
+
+  function on_state_change(event) {
+    if(timed_out)
+      return request.log.debug('Ignoring timed out state change', {'state':xhr.readyState, 'id':xhr.id})
+
+    request.log.debug('State change', {'state':xhr.readyState, 'id':xhr.id, 'timed_out':timed_out})
+
+    if(xhr.readyState === XHR.OPENED) {
+      request.log.debug('Request started', {'id':xhr.id})
+      for (var key in options.headers)
+        xhr.setRequestHeader(key, options.headers[key])
+    }
+
+    else if(xhr.readyState === XHR.HEADERS_RECEIVED)
+      on_response()
+
+    else if(xhr.readyState === XHR.LOADING) {
+      on_response()
+      on_loading()
+    }
+
+    else if(xhr.readyState === XHR.DONE) {
+      on_response()
+      on_loading()
+      on_end()
+    }
+  }
+
+  function on_response() {
+    if(did.response)
+      return
+
+    did.response = true
+    request.log.debug('Got response', {'id':xhr.id, 'status':xhr.status})
+    clearTimeout(xhr.timeoutTimer)
+    xhr.statusCode = xhr.status // Node request compatibility
+
+    // Detect failed CORS requests.
+    if(is_cors && xhr.statusCode == 0) {
+      var cors_err = new Error('CORS request rejected: ' + options.uri)
+      cors_err.cors = 'rejected'
+
+      // Do not process this request further.
+      did.loading = true
+      did.end = true
+
+      return options.callback(cors_err, xhr)
+    }
+
+    options.onResponse(null, xhr)
+  }
+
+  function on_loading() {
+    if(did.loading)
+      return
+
+    did.loading = true
+    request.log.debug('Response body loading', {'id':xhr.id})
+    // TODO: Maybe simulate "data" events by watching xhr.responseText
+  }
+
+  function on_end() {
+    if(did.end)
+      return
+
+    did.end = true
+    request.log.debug('Request done', {'id':xhr.id})
+
+    xhr.body = xhr.responseText
+    if(options.json) {
+      try        { xhr.body = JSON.parse(xhr.responseText) }
+      catch (er) { return options.callback(er, xhr)        }
+    }
+
+    options.callback(null, xhr, xhr.body)
+  }
+
+} // request
+
+request.withCredentials = false;
+request.DEFAULT_TIMEOUT = DEFAULT_TIMEOUT;
+
+//
+// defaults
+//
+
+request.defaults = function(options, requester) {
+  var def = function (method) {
+    var d = function (params, callback) {
+      if(typeof params === 'string')
+        params = {'uri': params};
+      else {
+        params = JSON.parse(JSON.stringify(params));
+      }
+      for (var i in options) {
+        if (params[i] === undefined) params[i] = options[i]
+      }
+      return method(params, callback)
+    }
+    return d
+  }
+  var de = def(request)
+  de.get = def(request.get)
+  de.post = def(request.post)
+  de.put = def(request.put)
+  de.head = def(request.head)
+  return de
+}
+
+//
+// HTTP method shortcuts
+//
+
+var shortcuts = [ 'get', 'put', 'post', 'head' ];
+shortcuts.forEach(function(shortcut) {
+  var method = shortcut.toUpperCase();
+  var func   = shortcut.toLowerCase();
+
+  request[func] = function(opts) {
+    if(typeof opts === 'string')
+      opts = {'method':method, 'uri':opts};
+    else {
+      opts = JSON.parse(JSON.stringify(opts));
+      opts.method = method;
+    }
+
+    var args = [opts].concat(Array.prototype.slice.apply(arguments, [1]));
+    return request.apply(this, args);
+  }
+})
+
+//
+// CouchDB shortcut
+//
+
+request.couch = function(options, callback) {
+  if(typeof options === 'string')
+    options = {'uri':options}
+
+  // Just use the request API to do JSON.
+  options.json = true
+  if(options.body)
+    options.json = options.body
+  delete options.body
+
+  callback = callback || noop
+
+  var xhr = request(options, couch_handler)
+  return xhr
+
+  function couch_handler(er, resp, body) {
+    if(er)
+      return callback(er, resp, body)
+
+    if((resp.statusCode < 200 || resp.statusCode > 299) && body.error) {
+      // The body is a Couch JSON object indicating the error.
+      er = new Error('CouchDB error: ' + (body.error.reason || body.error.error))
+      for (var key in body)
+        er[key] = body[key]
+      return callback(er, resp, body);
+    }
+
+    return callback(er, resp, body);
+  }
+}
+
+//
+// Utility
+//
+
+function noop() {}
+
+function getLogger() {
+  var logger = {}
+    , levels = ['trace', 'debug', 'info', 'warn', 'error']
+    , level, i
+
+  for(i = 0; i < levels.length; i++) {
+    level = levels[i]
+
+    logger[level] = noop
+    if(typeof console !== 'undefined' && console && console[level])
+      logger[level] = formatted(console, level)
+  }
+
+  return logger
+}
+
+function formatted(obj, method) {
+  return formatted_logger
+
+  function formatted_logger(str, context) {
+    if(typeof context === 'object')
+      str += ' ' + JSON.stringify(context)
+
+    return obj[method].call(obj, str)
+  }
+}
+
+// Return whether a URL is a cross-domain request.
+function is_crossDomain(url) {
+  var rurl = /^([\w\+\.\-]+:)(?:\/\/([^\/?#:]*)(?::(\d+))?)?/
+
+  // jQuery #8138, IE may throw an exception when accessing
+  // a field from window.location if document.domain has been set
+  var ajaxLocation
+  try { ajaxLocation = location.href }
+  catch (e) {
+    // Use the href attribute of an A element since IE will modify it given document.location
+    ajaxLocation = document.createElement( "a" );
+    ajaxLocation.href = "";
+    ajaxLocation = ajaxLocation.href;
+  }
+
+  var ajaxLocParts = rurl.exec(ajaxLocation.toLowerCase()) || []
+    , parts = rurl.exec(url.toLowerCase() )
+
+  var result = !!(
+    parts &&
+    (  parts[1] != ajaxLocParts[1]
+    || parts[2] != ajaxLocParts[2]
+    || (parts[3] || (parts[1] === "http:" ? 80 : 443)) != (ajaxLocParts[3] || (ajaxLocParts[1] === "http:" ? 80 : 443))
+    )
+  )
+
+  //console.debug('is_crossDomain('+url+') -> ' + result)
+  return result
+}
+
+// MIT License from http://phpjs.org/functions/base64_encode:358
+function b64_enc (data) {
+    // Encodes string using MIME base64 algorithm
+    var b64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+    var o1, o2, o3, h1, h2, h3, h4, bits, i = 0, ac = 0, enc="", tmp_arr = [];
+
+    if (!data) {
+        return data;
+    }
+
+    // assume utf8 data
+    // data = this.utf8_encode(data+'');
+
+    do { // pack three octets into four hexets
+        o1 = data.charCodeAt(i++);
+        o2 = data.charCodeAt(i++);
+        o3 = data.charCodeAt(i++);
+
+        bits = o1<<16 | o2<<8 | o3;
+
+        h1 = bits>>18 & 0x3f;
+        h2 = bits>>12 & 0x3f;
+        h3 = bits>>6 & 0x3f;
+        h4 = bits & 0x3f;
+
+        // use hexets to index into b64, and append result to encoded string
+        tmp_arr[ac++] = b64.charAt(h1) + b64.charAt(h2) + b64.charAt(h3) + b64.charAt(h4);
+    } while (i < data.length);
+
+    enc = tmp_arr.join('');
+
+    switch (data.length % 3) {
+        case 1:
+            enc = enc.slice(0, -2) + '==';
+        break;
+        case 2:
+            enc = enc.slice(0, -1) + '=';
+        break;
+    }
+
+    return enc;
+}
+    return request;
+//UMD FOOTER START
+}));
+//UMD FOOTER END
+
+},{}],"/home/action/play/mercury-todo/node_modules/mercury/index.js":[function(require,module,exports){
+'use strict';
+
 var SingleEvent = require('geval/single');
 var MultipleEvent = require('geval/multiple');
+var extend = require('xtend');
 
 /*
     Pro tip: Don't require `mercury` itself.
@@ -117,6 +719,9 @@ var mercury = module.exports = {
     // Entry
     main: require('main-loop'),
     app: app,
+
+    // Base
+    BaseEvent: require('value-event/base-event'),
 
     // Input
     Delegator: require('dom-delegator'),
@@ -135,6 +740,7 @@ var mercury = module.exports = {
     hash: require('observ-struct'),
     varhash: require('observ-varhash'),
     value: require('observ'),
+    state: state,
 
     // Render
     diff: require('vtree/diff'),
@@ -148,6 +754,7 @@ var mercury = module.exports = {
     // Utilities
     // deprecated: keep for back compat.
     computed: require('observ/computed'),
+    // deprecated: keep for back compat.
     watch: require('observ/watch')
 };
 
@@ -157,6 +764,21 @@ function input(names) {
     }
 
     return MultipleEvent(names);
+}
+
+function state(obj) {
+    var copy = extend(obj);
+    var $handles = copy.handles;
+
+    if ($handles) {
+        copy.handles = mercury.value(null);
+    }
+
+    var observ = mercury.struct(copy);
+    if ($handles) {
+        observ.handles.set(mercury.handles($handles, observ));
+    }
+    return observ;
 }
 
 function handles(funcs, context) {
@@ -180,7 +802,7 @@ function app(elem, observ, render, opts) {
     return observ(loop.update);
 }
 
-},{"dom-delegator":5,"geval/multiple":17,"geval/single":18,"main-loop":19,"observ":59,"observ-array":48,"observ-struct":54,"observ-varhash":56,"observ/computed":58,"observ/watch":60,"value-event/change":62,"value-event/event":63,"value-event/key":64,"value-event/submit":70,"value-event/value":71,"vdom-thunk":73,"vdom/create-element":77,"vdom/patch":83,"virtual-hyperscript":88,"virtual-hyperscript/svg":107,"vtree/diff":108}],3:[function(require,module,exports){
+},{"dom-delegator":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/index.js","geval/multiple":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/geval/multiple.js","geval/single":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/geval/single.js","main-loop":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/index.js","observ":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ/index.js","observ-array":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-array/index.js","observ-struct":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-struct/index.js","observ-varhash":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-varhash/index.js","observ/computed":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ/computed.js","observ/watch":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ/watch.js","value-event/base-event":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/value-event/base-event.js","value-event/change":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/value-event/change.js","value-event/event":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/value-event/event.js","value-event/key":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/value-event/key.js","value-event/submit":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/value-event/submit.js","value-event/value":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/value-event/value.js","vdom-thunk":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/vdom-thunk/index.js","vdom/create-element":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/vdom/create-element.js","vdom/patch":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/vdom/patch.js","virtual-hyperscript":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/index.js","virtual-hyperscript/svg":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/svg.js","vtree/diff":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/vtree/diff.js","xtend":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/xtend/immutable.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/add-event.js":[function(require,module,exports){
 var DataSet = require("data-set")
 
 module.exports = addEvent
@@ -200,7 +822,7 @@ function addEvent(target, type, handler) {
     }
 }
 
-},{"data-set":8}],4:[function(require,module,exports){
+},{"data-set":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/node_modules/data-set/index.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/dom-delegator.js":[function(require,module,exports){
 var globalDocument = require("global/document")
 var DataSet = require("data-set")
 var createStore = require("weakmap-shim/create-store")
@@ -214,6 +836,10 @@ var HANDLER_STORE = createStore()
 module.exports = DOMDelegator
 
 function DOMDelegator(document) {
+    if (!(this instanceof DOMDelegator)) {
+        return new DOMDelegator(document);
+    }
+
     document = document || globalDocument
 
     this.target = document.documentElement
@@ -235,14 +861,11 @@ DOMDelegator.allocateHandle =
     }
 
 DOMDelegator.transformHandle =
-    function transformHandle(handle, lambda) {
+    function transformHandle(handle, broadcast) {
         var func = HANDLER_STORE(handle).func
 
         return this.allocateHandle(function (ev) {
-            var result = lambda(ev)
-            if (result) {
-                func(result)
-            }
+            broadcast(ev, func);
         })
     }
 
@@ -267,11 +890,15 @@ DOMDelegator.prototype.removeGlobalEventListener =
     }
 
 DOMDelegator.prototype.listenTo = function listenTo(eventName) {
-    if (this.events[eventName]) {
-        return
+    if (!(eventName in this.events)) {
+        this.events[eventName] = 0;
     }
 
-    this.events[eventName] = true
+    this.events[eventName]++;
+
+    if (this.events[eventName] !== 1) {
+        return
+    }
 
     var listener = this.rawEventListeners[eventName]
     if (!listener) {
@@ -283,11 +910,20 @@ DOMDelegator.prototype.listenTo = function listenTo(eventName) {
 }
 
 DOMDelegator.prototype.unlistenTo = function unlistenTo(eventName) {
-    if (!this.events[eventName]) {
+    if (!(eventName in this.events)) {
+        this.events[eventName] = 0;
+    }
+
+    if (this.events[eventName] === 0) {
+        throw new Error("already unlistened to event.");
+    }
+
+    this.events[eventName]--;
+
+    if (this.events[eventName] !== 0) {
         return
     }
 
-    this.events[eventName] = false
     var listener = this.rawEventListeners[eventName]
 
     if (!listener) {
@@ -375,21 +1011,24 @@ function Handle() {
     this.type = "dom-delegator-handle"
 }
 
-},{"./add-event.js":3,"./proxy-event.js":14,"./remove-event.js":15,"data-set":8,"global/document":9,"weakmap-shim/create-store":12}],5:[function(require,module,exports){
+},{"./add-event.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/add-event.js","./proxy-event.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/proxy-event.js","./remove-event.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/remove-event.js","data-set":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/node_modules/data-set/index.js","global/document":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/node_modules/global/document.js","weakmap-shim/create-store":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/node_modules/weakmap-shim/create-store.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/index.js":[function(require,module,exports){
 var Individual = require("individual")
 var cuid = require("cuid")
 var globalDocument = require("global/document")
 
 var DOMDelegator = require("./dom-delegator.js")
 
-var delegatorCache = Individual("__DOM_DELEGATOR_CACHE@9", {
+var versionKey = "12"
+var cacheKey = "__DOM_DELEGATOR_CACHE@" + versionKey
+var cacheTokenKey = "__DOM_DELEGATOR_CACHE_TOKEN@" + versionKey
+var delegatorCache = Individual(cacheKey, {
     delegators: {}
 })
 var commonEvents = [
     "blur", "change", "click",  "contextmenu", "dblclick",
     "error","focus", "focusin", "focusout", "input", "keydown",
     "keypress", "keyup", "load", "mousedown", "mouseup",
-    "resize", "scroll", "select", "submit", "touchcancel",
+    "resize", "select", "submit", "touchcancel",
     "touchend", "touchstart", "unload"
 ]
 
@@ -408,11 +1047,11 @@ function Delegator(opts) {
     opts = opts || {}
     var document = opts.document || globalDocument
 
-    var cacheKey = document["__DOM_DELEGATOR_CACHE_TOKEN@9"]
+    var cacheKey = document[cacheTokenKey]
 
     if (!cacheKey) {
         cacheKey =
-            document["__DOM_DELEGATOR_CACHE_TOKEN@9"] = cuid()
+            document[cacheTokenKey] = cuid()
     }
 
     var delegator = delegatorCache.delegators[cacheKey]
@@ -434,7 +1073,7 @@ function Delegator(opts) {
 Delegator.allocateHandle = DOMDelegator.allocateHandle;
 Delegator.transformHandle = DOMDelegator.transformHandle;
 
-},{"./dom-delegator.js":4,"cuid":6,"global/document":9,"individual":10}],6:[function(require,module,exports){
+},{"./dom-delegator.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/dom-delegator.js","cuid":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/node_modules/cuid/dist/browser-cuid.js","global/document":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/node_modules/global/document.js","individual":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/node_modules/individual/index.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/node_modules/cuid/dist/browser-cuid.js":[function(require,module,exports){
 /**
  * cuid.js
  * Collision-resistant UID generator for browsers and node.
@@ -546,7 +1185,7 @@ Delegator.transformHandle = DOMDelegator.transformHandle;
 
 }(this.applitude || this));
 
-},{}],7:[function(require,module,exports){
+},{}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/node_modules/data-set/create-hash.js":[function(require,module,exports){
 module.exports = createHash
 
 function createHash(elem) {
@@ -570,7 +1209,7 @@ function createHash(elem) {
     return hash
 }
 
-},{}],8:[function(require,module,exports){
+},{}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/node_modules/data-set/index.js":[function(require,module,exports){
 var createStore = require("weakmap-shim/create-store")
 var Individual = require("individual")
 
@@ -590,7 +1229,7 @@ function DataSet(elem) {
     return store.hash
 }
 
-},{"./create-hash.js":7,"individual":10,"weakmap-shim/create-store":12}],9:[function(require,module,exports){
+},{"./create-hash.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/node_modules/data-set/create-hash.js","individual":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/node_modules/individual/index.js","weakmap-shim/create-store":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/node_modules/weakmap-shim/create-store.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/node_modules/global/document.js":[function(require,module,exports){
 (function (global){
 var topLevel = typeof global !== 'undefined' ? global :
     typeof window !== 'undefined' ? window : {}
@@ -609,7 +1248,7 @@ if (typeof document !== 'undefined') {
 }
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"min-document":122}],10:[function(require,module,exports){
+},{"min-document":"/home/action/.parts/lib/node_modules/watchify/node_modules/browserify/node_modules/browser-resolve/empty.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/node_modules/individual/index.js":[function(require,module,exports){
 (function (global){
 var root = typeof window !== 'undefined' ?
     window : typeof global !== 'undefined' ?
@@ -631,7 +1270,7 @@ function Individual(key, value) {
 }
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],11:[function(require,module,exports){
+},{}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/node_modules/inherits/inherits_browser.js":[function(require,module,exports){
 if (typeof Object.create === 'function') {
   // implementation from standard node.js 'util' module
   module.exports = function inherits(ctor, superCtor) {
@@ -656,7 +1295,7 @@ if (typeof Object.create === 'function') {
   }
 }
 
-},{}],12:[function(require,module,exports){
+},{}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/node_modules/weakmap-shim/create-store.js":[function(require,module,exports){
 var hiddenStore = require('./hidden-store.js');
 
 module.exports = createStore;
@@ -675,7 +1314,7 @@ function createStore() {
     };
 }
 
-},{"./hidden-store.js":13}],13:[function(require,module,exports){
+},{"./hidden-store.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/node_modules/weakmap-shim/hidden-store.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/node_modules/weakmap-shim/hidden-store.js":[function(require,module,exports){
 module.exports = hiddenStore;
 
 function hiddenStore(obj, key) {
@@ -693,7 +1332,7 @@ function hiddenStore(obj, key) {
     return store;
 }
 
-},{}],14:[function(require,module,exports){
+},{}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/proxy-event.js":[function(require,module,exports){
 var inherits = require("inherits")
 
 var ALL_PROPS = [
@@ -773,7 +1412,7 @@ function KeyEvent(ev) {
 
 inherits(KeyEvent, ProxyEvent)
 
-},{"inherits":11}],15:[function(require,module,exports){
+},{"inherits":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/node_modules/inherits/inherits_browser.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/remove-event.js":[function(require,module,exports){
 var DataSet = require("data-set")
 
 module.exports = removeEvent
@@ -794,7 +1433,7 @@ function removeEvent(target, type, handler) {
     }
 }
 
-},{"data-set":8}],16:[function(require,module,exports){
+},{"data-set":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/node_modules/data-set/index.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/geval/event.js":[function(require,module,exports){
 module.exports = Event
 
 function Event() {
@@ -822,7 +1461,7 @@ function Event() {
     }
 }
 
-},{}],17:[function(require,module,exports){
+},{}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/geval/multiple.js":[function(require,module,exports){
 var event = require("./single.js")
 
 module.exports = multiple
@@ -834,7 +1473,7 @@ function multiple(names) {
     }, {})
 }
 
-},{"./single.js":18}],18:[function(require,module,exports){
+},{"./single.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/geval/single.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/geval/single.js":[function(require,module,exports){
 var Event = require('./event.js')
 
 module.exports = Single
@@ -851,7 +1490,7 @@ function Single() {
     }
 }
 
-},{"./event.js":16}],19:[function(require,module,exports){
+},{"./event.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/geval/event.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/index.js":[function(require,module,exports){
 var raf = require("raf")
 var vtreeDiff = require("vtree/diff")
 var vdomCreate = require("vdom/create-element")
@@ -931,7 +1570,7 @@ function main(initialState, view, opts) {
     }
 }
 
-},{"error/typed":23,"raf":24,"vdom/create-element":27,"vdom/patch":33,"vtree/diff":35}],20:[function(require,module,exports){
+},{"error/typed":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/error/typed.js","raf":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/raf/index.js","vdom/create-element":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/create-element.js","vdom/patch":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/patch.js","vtree/diff":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/diff.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/error/node_modules/camelize/index.js":[function(require,module,exports){
 module.exports = function(obj) {
     if (typeof obj === 'string') return camelCase(obj);
     return walk(obj);
@@ -992,7 +1631,7 @@ function reduce (xs, f, acc) {
     return acc;
 }
 
-},{}],21:[function(require,module,exports){
+},{}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/error/node_modules/string-template/index.js":[function(require,module,exports){
 var nargs = /\{([0-9a-zA-Z]+)\}/g
 var slice = Array.prototype.slice
 
@@ -1028,24 +1667,7 @@ function template(string) {
     })
 }
 
-},{}],22:[function(require,module,exports){
-module.exports = extend
-
-function extend(target) {
-    for (var i = 1; i < arguments.length; i++) {
-        var source = arguments[i]
-
-        for (var key in source) {
-            if (source.hasOwnProperty(key)) {
-                target[key] = source[key]
-            }
-        }
-    }
-
-    return target
-}
-
-},{}],23:[function(require,module,exports){
+},{}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/error/typed.js":[function(require,module,exports){
 var camelize = require("camelize")
 var template = require("string-template")
 var extend = require("xtend/mutable")
@@ -1095,7 +1717,7 @@ function TypedError(args) {
 }
 
 
-},{"camelize":20,"string-template":21,"xtend/mutable":22}],24:[function(require,module,exports){
+},{"camelize":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/error/node_modules/camelize/index.js","string-template":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/error/node_modules/string-template/index.js","xtend/mutable":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/xtend/mutable.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/raf/index.js":[function(require,module,exports){
 var now = require('performance-now')
   , global = typeof window === 'undefined' ? {} : window
   , vendors = ['moz', 'webkit']
@@ -1177,7 +1799,7 @@ module.exports.cancel = function() {
   caf.apply(global, arguments)
 }
 
-},{"performance-now":25}],25:[function(require,module,exports){
+},{"performance-now":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/raf/node_modules/performance-now/lib/performance-now.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/raf/node_modules/performance-now/lib/performance-now.js":[function(require,module,exports){
 (function (process){
 // Generated by CoffeeScript 1.6.3
 (function() {
@@ -1217,7 +1839,7 @@ module.exports.cancel = function() {
 */
 
 }).call(this,require('_process'))
-},{"_process":123}],26:[function(require,module,exports){
+},{"_process":"/home/action/.parts/lib/node_modules/watchify/node_modules/browserify/node_modules/process/browser.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/apply-properties.js":[function(require,module,exports){
 var isObject = require("is-object")
 var isHook = require("vtree/is-vhook")
 
@@ -1315,7 +1937,7 @@ function getPrototype(value) {
     }
 }
 
-},{"is-object":30,"vtree/is-vhook":38}],27:[function(require,module,exports){
+},{"is-object":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/node_modules/is-object/index.js","vtree/is-vhook":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-vhook.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/create-element.js":[function(require,module,exports){
 var document = require("global/document")
 
 var applyProperties = require("./apply-properties")
@@ -1363,7 +1985,7 @@ function createElement(vnode, opts) {
     return node
 }
 
-},{"./apply-properties":26,"global/document":29,"vtree/handle-thunk":36,"vtree/is-vnode":39,"vtree/is-vtext":40,"vtree/is-widget":41}],28:[function(require,module,exports){
+},{"./apply-properties":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/apply-properties.js","global/document":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/node_modules/global/document.js","vtree/handle-thunk":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/handle-thunk.js","vtree/is-vnode":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-vnode.js","vtree/is-vtext":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-vtext.js","vtree/is-widget":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-widget.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/dom-index.js":[function(require,module,exports){
 // Maps a virtual DOM tree onto a real DOM tree in an efficient manner.
 // We don't want to read all of the DOM nodes in the tree so we use
 // the in-order tree indexing to eliminate recursion down certain branches.
@@ -1450,16 +2072,16 @@ function ascending(a, b) {
     return a > b ? 1 : -1
 }
 
-},{}],29:[function(require,module,exports){
-module.exports=require(9)
-},{"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/dom-delegator/node_modules/global/document.js":9,"min-document":122}],30:[function(require,module,exports){
+},{}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/node_modules/global/document.js":[function(require,module,exports){
+module.exports=require("/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/node_modules/global/document.js")
+},{"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/node_modules/global/document.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/node_modules/global/document.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/node_modules/is-object/index.js":[function(require,module,exports){
 module.exports = isObject
 
 function isObject(x) {
     return typeof x === "object" && x !== null
 }
 
-},{}],31:[function(require,module,exports){
+},{}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/node_modules/x-is-array/index.js":[function(require,module,exports){
 var nativeIsArray = Array.isArray
 var toString = Object.prototype.toString
 
@@ -1469,7 +2091,7 @@ function isArray(obj) {
     return toString.call(obj) === "[object Array]"
 }
 
-},{}],32:[function(require,module,exports){
+},{}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/patch-op.js":[function(require,module,exports){
 var applyProperties = require("./apply-properties")
 
 var isWidget = require("vtree/is-widget")
@@ -1639,7 +2261,7 @@ function replaceRoot(oldRoot, newRoot) {
     return newRoot;
 }
 
-},{"./apply-properties":26,"./create-element":27,"./update-widget":34,"vtree/is-widget":41,"vtree/vpatch":45}],33:[function(require,module,exports){
+},{"./apply-properties":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/apply-properties.js","./create-element":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/create-element.js","./update-widget":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/update-widget.js","vtree/is-widget":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-widget.js","vtree/vpatch":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/vpatch.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/patch.js":[function(require,module,exports){
 var document = require("global/document")
 var isArray = require("x-is-array")
 
@@ -1717,7 +2339,7 @@ function patchIndices(patches) {
     return indices
 }
 
-},{"./dom-index":28,"./patch-op":32,"global/document":29,"x-is-array":31}],34:[function(require,module,exports){
+},{"./dom-index":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/dom-index.js","./patch-op":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/patch-op.js","global/document":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/node_modules/global/document.js","x-is-array":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/node_modules/x-is-array/index.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/update-widget.js":[function(require,module,exports){
 var isWidget = require("vtree/is-widget")
 
 module.exports = updateWidget
@@ -1734,7 +2356,7 @@ function updateWidget(a, b) {
     return false
 }
 
-},{"vtree/is-widget":41}],35:[function(require,module,exports){
+},{"vtree/is-widget":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-widget.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/diff.js":[function(require,module,exports){
 var isArray = require("x-is-array")
 var isObject = require("is-object")
 
@@ -2050,7 +2672,7 @@ function appendPatch(apply, patch) {
     }
 }
 
-},{"./handle-thunk":36,"./is-thunk":37,"./is-vhook":38,"./is-vnode":39,"./is-vtext":40,"./is-widget":41,"./vpatch":45,"is-object":42,"x-is-array":43}],36:[function(require,module,exports){
+},{"./handle-thunk":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/handle-thunk.js","./is-thunk":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-thunk.js","./is-vhook":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-vhook.js","./is-vnode":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-vnode.js","./is-vtext":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-vtext.js","./is-widget":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-widget.js","./vpatch":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/vpatch.js","is-object":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/node_modules/is-object/index.js","x-is-array":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/node_modules/x-is-array/index.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/handle-thunk.js":[function(require,module,exports){
 var isVNode = require("./is-vnode")
 var isVText = require("./is-vtext")
 var isWidget = require("./is-widget")
@@ -2092,14 +2714,14 @@ function renderThunk(thunk, previous) {
     return renderedThunk
 }
 
-},{"./is-thunk":37,"./is-vnode":39,"./is-vtext":40,"./is-widget":41}],37:[function(require,module,exports){
+},{"./is-thunk":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-thunk.js","./is-vnode":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-vnode.js","./is-vtext":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-vtext.js","./is-widget":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-widget.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-thunk.js":[function(require,module,exports){
 module.exports = isThunk
 
 function isThunk(t) {
     return t && t.type === "Thunk"
 }
 
-},{}],38:[function(require,module,exports){
+},{}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-vhook.js":[function(require,module,exports){
 module.exports = isHook
 
 function isHook(hook) {
@@ -2107,7 +2729,7 @@ function isHook(hook) {
         !hook.hasOwnProperty("hook")
 }
 
-},{}],39:[function(require,module,exports){
+},{}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-vnode.js":[function(require,module,exports){
 var version = require("./version")
 
 module.exports = isVirtualNode
@@ -2116,7 +2738,7 @@ function isVirtualNode(x) {
     return x && x.type === "VirtualNode" && x.version === version
 }
 
-},{"./version":44}],40:[function(require,module,exports){
+},{"./version":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/version.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-vtext.js":[function(require,module,exports){
 var version = require("./version")
 
 module.exports = isVirtualText
@@ -2125,21 +2747,21 @@ function isVirtualText(x) {
     return x && x.type === "VirtualText" && x.version === version
 }
 
-},{"./version":44}],41:[function(require,module,exports){
+},{"./version":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/version.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-widget.js":[function(require,module,exports){
 module.exports = isWidget
 
 function isWidget(w) {
     return w && w.type === "Widget"
 }
 
-},{}],42:[function(require,module,exports){
-module.exports=require(30)
-},{"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/main-loop/node_modules/vdom/node_modules/is-object/index.js":30}],43:[function(require,module,exports){
-module.exports=require(31)
-},{"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/main-loop/node_modules/vdom/node_modules/x-is-array/index.js":31}],44:[function(require,module,exports){
+},{}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/node_modules/is-object/index.js":[function(require,module,exports){
+module.exports=require("/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/node_modules/is-object/index.js")
+},{"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/node_modules/is-object/index.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/node_modules/is-object/index.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/node_modules/x-is-array/index.js":[function(require,module,exports){
+module.exports=require("/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/node_modules/x-is-array/index.js")
+},{"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/node_modules/x-is-array/index.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/node_modules/x-is-array/index.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/version.js":[function(require,module,exports){
 module.exports = "1"
 
-},{}],45:[function(require,module,exports){
+},{}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/vpatch.js":[function(require,module,exports){
 var version = require("./version")
 
 VirtualPatch.NONE = 0
@@ -2163,7 +2785,7 @@ function VirtualPatch(type, vNode, patch) {
 VirtualPatch.prototype.version = version
 VirtualPatch.prototype.type = "VirtualPatch"
 
-},{"./version":44}],46:[function(require,module,exports){
+},{"./version":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/version.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-array/add-listener.js":[function(require,module,exports){
 var setNonEnumerable = require("./lib/set-non-enumerable.js");
 
 module.exports = addListener
@@ -2193,7 +2815,7 @@ function addListener(observArray, observ) {
     })
 }
 
-},{"./lib/set-non-enumerable.js":49}],47:[function(require,module,exports){
+},{"./lib/set-non-enumerable.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-array/lib/set-non-enumerable.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-array/array-methods.js":[function(require,module,exports){
 var ObservArray = require("./index.js")
 
 var slice = Array.prototype.slice
@@ -2260,7 +2882,7 @@ function notImplemented() {
     throw new Error("Pull request welcome")
 }
 
-},{"./index.js":48}],48:[function(require,module,exports){
+},{"./index.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-array/index.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-array/index.js":[function(require,module,exports){
 var Observ = require("observ")
 
 // circular dep between ArrayMethods & this file
@@ -2339,7 +2961,7 @@ function getLength() {
     return this._list.length
 }
 
-},{"./add-listener.js":46,"./array-methods.js":47,"./put.js":51,"./splice.js":52,"./transaction.js":53,"observ":59}],49:[function(require,module,exports){
+},{"./add-listener.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-array/add-listener.js","./array-methods.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-array/array-methods.js","./put.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-array/put.js","./splice.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-array/splice.js","./transaction.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-array/transaction.js","observ":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ/index.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-array/lib/set-non-enumerable.js":[function(require,module,exports){
 module.exports = setNonEnumerable;
 
 function setNonEnumerable(object, key, value) {
@@ -2351,7 +2973,7 @@ function setNonEnumerable(object, key, value) {
     });
 }
 
-},{}],50:[function(require,module,exports){
+},{}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-array/node_modules/adiff/index.js":[function(require,module,exports){
 function head (a) {
   return a[0]
 }
@@ -2654,7 +3276,7 @@ var exports = module.exports = function (deps, exports) {
 }
 exports(null, exports)
 
-},{}],51:[function(require,module,exports){
+},{}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-array/put.js":[function(require,module,exports){
 var addListener = require("./add-listener.js")
 var setNonEnumerable = require("./lib/set-non-enumerable.js");
 
@@ -2693,7 +3315,7 @@ function put(index, value) {
     obs.set(valueList)
     return value
 }
-},{"./add-listener.js":46,"./lib/set-non-enumerable.js":49}],52:[function(require,module,exports){
+},{"./add-listener.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-array/add-listener.js","./lib/set-non-enumerable.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-array/lib/set-non-enumerable.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-array/splice.js":[function(require,module,exports){
 var slice = Array.prototype.slice
 
 var addListener = require("./add-listener.js")
@@ -2745,7 +3367,7 @@ function splice(index, amount) {
     return removed
 }
 
-},{"./add-listener.js":46,"./lib/set-non-enumerable.js":49}],53:[function(require,module,exports){
+},{"./add-listener.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-array/add-listener.js","./lib/set-non-enumerable.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-array/lib/set-non-enumerable.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-array/transaction.js":[function(require,module,exports){
 var addListener = require("./add-listener.js")
 var setNonEnumerable = require("./lib/set-non-enumerable.js")
 var adiff = require("adiff")
@@ -2803,7 +3425,7 @@ function unpack(value, index){
     }
     return typeof value === "function" ? value() : value
 }
-},{"./add-listener.js":46,"./lib/set-non-enumerable.js":49,"adiff":50}],54:[function(require,module,exports){
+},{"./add-listener.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-array/add-listener.js","./lib/set-non-enumerable.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-array/lib/set-non-enumerable.js","adiff":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-array/node_modules/adiff/index.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-struct/index.js":[function(require,module,exports){
 var Observ = require("observ")
 var extend = require("xtend")
 
@@ -2913,7 +3535,7 @@ function ObservStruct(struct) {
     return obs
 }
 
-},{"observ":59,"xtend":55}],55:[function(require,module,exports){
+},{"observ":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ/index.js","xtend":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-struct/node_modules/xtend/index.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-struct/node_modules/xtend/index.js":[function(require,module,exports){
 module.exports = extend
 
 function extend() {
@@ -2932,7 +3554,7 @@ function extend() {
     return target
 }
 
-},{}],56:[function(require,module,exports){
+},{}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-varhash/index.js":[function(require,module,exports){
 var Observ = require('observ')
 var extend = require('xtend')
 
@@ -3089,9 +3711,9 @@ function nameTombstone () {
   return '[object Tombstone]'
 }
 
-},{"observ":59,"xtend":57}],57:[function(require,module,exports){
-module.exports=require(55)
-},{"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/observ-struct/node_modules/xtend/index.js":55}],58:[function(require,module,exports){
+},{"observ":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ/index.js","xtend":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-varhash/node_modules/xtend/index.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-varhash/node_modules/xtend/index.js":[function(require,module,exports){
+module.exports=require("/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-struct/node_modules/xtend/index.js")
+},{"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-struct/node_modules/xtend/index.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-struct/node_modules/xtend/index.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ/computed.js":[function(require,module,exports){
 var Observable = require("./index.js")
 
 module.exports = computed
@@ -3112,7 +3734,7 @@ function computed(observables, lambda) {
     return result
 }
 
-},{"./index.js":59}],59:[function(require,module,exports){
+},{"./index.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ/index.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ/index.js":[function(require,module,exports){
 module.exports = Observable
 
 function Observable(value) {
@@ -3141,7 +3763,7 @@ function Observable(value) {
     }
 }
 
-},{}],60:[function(require,module,exports){
+},{}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ/watch.js":[function(require,module,exports){
 module.exports = watch
 
 function watch(observable, listener) {
@@ -3150,7 +3772,7 @@ function watch(observable, listener) {
     return remove
 }
 
-},{}],61:[function(require,module,exports){
+},{}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/value-event/base-event.js":[function(require,module,exports){
 var Delegator = require('dom-delegator')
 
 module.exports = BaseEvent
@@ -3174,25 +3796,25 @@ function BaseEvent(lambda) {
         return handler;
     }
 
-    function handleLambda(ev) {
-        return lambda.call(this, ev)
+    function handleLambda(ev, broadcast) {
+        return lambda.call(this, ev, broadcast)
     }
 
     function handleEvent(ev) {
-        var value = lambda.call(this, ev)
-        if (!value) {
-            return
-        }
+        var self = this
+        lambda.call(self, ev, broadcast)
 
-        if (typeof this.fn === 'function') {
-            this.fn(value)
-        } else {
-            this.fn.write(value)
+        function broadcast(value) {
+            if (typeof self.fn === 'function') {
+                self.fn(value)
+            } else {
+                self.fn.write(value)
+            }
         }
     }
 }
 
-},{"dom-delegator":5}],62:[function(require,module,exports){
+},{"dom-delegator":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/index.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/value-event/change.js":[function(require,module,exports){
 var extend = require('xtend')
 var getFormData = require('form-data-set/element')
 
@@ -3205,7 +3827,7 @@ var VALID_INPUT = ['color', 'date', 'datetime', 'datetime-local', 'email',
 
 module.exports = BaseEvent(changeLambda);
 
-function changeLambda(ev) {
+function changeLambda(ev, broadcast) {
     var target = ev.target
 
     var isValid =
@@ -3222,32 +3844,32 @@ function changeLambda(ev) {
     var value = getFormData(ev.currentTarget)
     var data = extend(value, this.data)
 
-    return data
+    broadcast(data)
 }
 
-},{"./base-event.js":61,"form-data-set/element":66,"xtend":69}],63:[function(require,module,exports){
+},{"./base-event.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/value-event/base-event.js","form-data-set/element":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/value-event/node_modules/form-data-set/element.js","xtend":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/value-event/node_modules/xtend/index.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/value-event/event.js":[function(require,module,exports){
 var BaseEvent = require('./base-event.js');
 
 module.exports = BaseEvent(eventLambda);
 
-function eventLambda(ev) {
-    return this.data;
+function eventLambda(ev, broadcast) {
+    broadcast(this.data);
 }
 
-},{"./base-event.js":61}],64:[function(require,module,exports){
+},{"./base-event.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/value-event/base-event.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/value-event/key.js":[function(require,module,exports){
 var BaseEvent = require('./base-event.js');
 
 module.exports = BaseEvent(keyLambda);
 
-function keyLambda(ev) {
+function keyLambda(ev, broadcast) {
     var key = this.opts.key;
 
     if (ev.keyCode === key) {
-        return this.data;
+        broadcast(this.data);
     }
 }
 
-},{"./base-event.js":61}],65:[function(require,module,exports){
+},{"./base-event.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/value-event/base-event.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/value-event/node_modules/dom-walk/index.js":[function(require,module,exports){
 var slice = Array.prototype.slice
 
 module.exports = iterativelyWalk
@@ -3273,7 +3895,7 @@ function iterativelyWalk(nodes, cb) {
     }
 }
 
-},{}],66:[function(require,module,exports){
+},{}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/value-event/node_modules/form-data-set/element.js":[function(require,module,exports){
 var walk = require('dom-walk')
 
 var FormData = require('./index.js')
@@ -3299,7 +3921,7 @@ function getFormData(rootElem) {
     return FormData(elements)
 }
 
-},{"./index.js":67,"dom-walk":65}],67:[function(require,module,exports){
+},{"./index.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/value-event/node_modules/form-data-set/index.js","dom-walk":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/value-event/node_modules/dom-walk/index.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/value-event/node_modules/form-data-set/index.js":[function(require,module,exports){
 /*jshint maxcomplexity: 10*/
 
 module.exports = FormData
@@ -3376,7 +3998,7 @@ function filterNull(val) {
     return val !== null
 }
 
-},{}],68:[function(require,module,exports){
+},{}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/value-event/node_modules/xtend/has-keys.js":[function(require,module,exports){
 module.exports = hasKeys
 
 function hasKeys(source) {
@@ -3385,7 +4007,7 @@ function hasKeys(source) {
         typeof source === "function")
 }
 
-},{}],69:[function(require,module,exports){
+},{}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/value-event/node_modules/xtend/index.js":[function(require,module,exports){
 var hasKeys = require("./has-keys")
 
 module.exports = extend
@@ -3410,7 +4032,7 @@ function extend() {
     return target
 }
 
-},{"./has-keys":68}],70:[function(require,module,exports){
+},{"./has-keys":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/value-event/node_modules/xtend/has-keys.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/value-event/submit.js":[function(require,module,exports){
 var extend = require('xtend')
 var getFormData = require('form-data-set/element')
 
@@ -3420,7 +4042,7 @@ var ENTER = 13
 
 module.exports = BaseEvent(submitLambda);
 
-function submitLambda(ev) {
+function submitLambda(ev, broadcast) {
     var target = ev.target
 
     var isValid =
@@ -3445,10 +4067,10 @@ function submitLambda(ev) {
         ev.preventDefault();
     }
 
-    return data;
+    broadcast(data);
 }
 
-},{"./base-event.js":61,"form-data-set/element":66,"xtend":69}],71:[function(require,module,exports){
+},{"./base-event.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/value-event/base-event.js","form-data-set/element":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/value-event/node_modules/form-data-set/element.js","xtend":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/value-event/node_modules/xtend/index.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/value-event/value.js":[function(require,module,exports){
 var extend = require('xtend')
 var getFormData = require('form-data-set/element')
 
@@ -3456,14 +4078,14 @@ var BaseEvent = require('./base-event.js');
 
 module.exports = BaseEvent(valueLambda);
 
-function valueLambda(ev) {
+function valueLambda(ev, broadcast) {
     var value = getFormData(ev.currentTarget)
     var data = extend(value, this.data)
 
-    return data;
+    broadcast(data);
 }
 
-},{"./base-event.js":61,"form-data-set/element":66,"xtend":69}],72:[function(require,module,exports){
+},{"./base-event.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/value-event/base-event.js","form-data-set/element":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/value-event/node_modules/form-data-set/element.js","xtend":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/value-event/node_modules/xtend/index.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/vdom-thunk/immutable-thunk.js":[function(require,module,exports){
 function Thunk(fn, args, key, eqArgs) {
     this.fn = fn;
     this.args = args;
@@ -3494,12 +4116,12 @@ function render(previous) {
     }
 }
 
-},{}],73:[function(require,module,exports){
+},{}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/vdom-thunk/index.js":[function(require,module,exports){
 var Partial = require('./partial');
 
 module.exports = Partial();
 
-},{"./partial":74}],74:[function(require,module,exports){
+},{"./partial":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/vdom-thunk/partial.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/vdom-thunk/partial.js":[function(require,module,exports){
 var shallowEq = require('./shallow-eq');
 var Thunk = require('./immutable-thunk');
 
@@ -3533,7 +4155,7 @@ function copyOver(list, offset) {
     return newList;
 }
 
-},{"./immutable-thunk":72,"./shallow-eq":75}],75:[function(require,module,exports){
+},{"./immutable-thunk":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/vdom-thunk/immutable-thunk.js","./shallow-eq":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/vdom-thunk/shallow-eq.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/vdom-thunk/shallow-eq.js":[function(require,module,exports){
 module.exports = shallowEq;
 
 function shallowEq(currentArgs, previousArgs) {
@@ -3556,25 +4178,11 @@ function shallowEq(currentArgs, previousArgs) {
     return true;
 }
 
-},{}],76:[function(require,module,exports){
-module.exports=require(26)
-},{"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/main-loop/node_modules/vdom/apply-properties.js":26,"is-object":80,"vtree/is-vhook":111}],77:[function(require,module,exports){
-module.exports=require(27)
-},{"./apply-properties":76,"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/main-loop/node_modules/vdom/create-element.js":27,"global/document":79,"vtree/handle-thunk":109,"vtree/is-vnode":112,"vtree/is-vtext":113,"vtree/is-widget":114}],78:[function(require,module,exports){
-module.exports=require(28)
-},{"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/main-loop/node_modules/vdom/dom-index.js":28}],79:[function(require,module,exports){
-module.exports=require(9)
-},{"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/dom-delegator/node_modules/global/document.js":9,"min-document":122}],80:[function(require,module,exports){
-module.exports=require(30)
-},{"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/main-loop/node_modules/vdom/node_modules/is-object/index.js":30}],81:[function(require,module,exports){
-module.exports=require(31)
-},{"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/main-loop/node_modules/vdom/node_modules/x-is-array/index.js":31}],82:[function(require,module,exports){
-module.exports=require(32)
-},{"./apply-properties":76,"./create-element":77,"./update-widget":84,"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/main-loop/node_modules/vdom/patch-op.js":32,"vtree/is-widget":114,"vtree/vpatch":118}],83:[function(require,module,exports){
-module.exports=require(33)
-},{"./dom-index":78,"./patch-op":82,"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/main-loop/node_modules/vdom/patch.js":33,"global/document":79,"x-is-array":81}],84:[function(require,module,exports){
-module.exports=require(34)
-},{"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/main-loop/node_modules/vdom/update-widget.js":34,"vtree/is-widget":114}],85:[function(require,module,exports){
+},{}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/vdom/create-element.js":[function(require,module,exports){
+module.exports=require("/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/create-element.js")
+},{"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/create-element.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/create-element.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/vdom/patch.js":[function(require,module,exports){
+module.exports=require("/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/patch.js")
+},{"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/patch.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vdom/patch.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/hooks/data-set-hook.js":[function(require,module,exports){
 var DataSet = require("data-set")
 
 module.exports = DataSetHook;
@@ -3594,7 +4202,7 @@ DataSetHook.prototype.hook = function (node, propertyName) {
     ds[propName] = this.value;
 };
 
-},{"data-set":90}],86:[function(require,module,exports){
+},{"data-set":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/node_modules/data-set/index.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/hooks/ev-hook.js":[function(require,module,exports){
 var DataSet = require("data-set")
 
 module.exports = DataSetHook;
@@ -3621,7 +4229,7 @@ DataSetHook.prototype.unhook = function(node, propertyName) {
     ds[propName] = undefined;
 }
 
-},{"data-set":90}],87:[function(require,module,exports){
+},{"data-set":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/node_modules/data-set/index.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/hooks/soft-set-hook.js":[function(require,module,exports){
 module.exports = SoftSetHook;
 
 function SoftSetHook(value) {
@@ -3638,7 +4246,7 @@ SoftSetHook.prototype.hook = function (node, propertyName) {
     }
 };
 
-},{}],88:[function(require,module,exports){
+},{}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/index.js":[function(require,module,exports){
 var TypedError = require("error/typed")
 
 var VNode = require("vtree/vnode.js")
@@ -3767,37 +4375,23 @@ function isChildren(x) {
     return typeof x === "string" || Array.isArray(x) || isChild(x)
 }
 
-},{"./hooks/data-set-hook.js":85,"./hooks/ev-hook.js":86,"./hooks/soft-set-hook.js":87,"./parse-tag.js":106,"error/typed":97,"vtree/is-thunk":98,"vtree/is-vhook":99,"vtree/is-vnode":100,"vtree/is-vtext":101,"vtree/is-widget":102,"vtree/vnode.js":104,"vtree/vtext.js":105}],89:[function(require,module,exports){
-module.exports=require(7)
-},{"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/dom-delegator/node_modules/data-set/create-hash.js":7}],90:[function(require,module,exports){
-module.exports=require(8)
-},{"./create-hash.js":89,"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/dom-delegator/node_modules/data-set/index.js":8,"individual":91,"weakmap-shim/create-store":92}],91:[function(require,module,exports){
-module.exports=require(10)
-},{"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/dom-delegator/node_modules/individual/index.js":10}],92:[function(require,module,exports){
-module.exports=require(12)
-},{"./hidden-store.js":93,"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/dom-delegator/node_modules/weakmap-shim/create-store.js":12}],93:[function(require,module,exports){
-module.exports=require(13)
-},{"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/dom-delegator/node_modules/weakmap-shim/hidden-store.js":13}],94:[function(require,module,exports){
-module.exports=require(20)
-},{"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/main-loop/node_modules/error/node_modules/camelize/index.js":20}],95:[function(require,module,exports){
-module.exports=require(21)
-},{"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/main-loop/node_modules/error/node_modules/string-template/index.js":21}],96:[function(require,module,exports){
-module.exports=require(22)
-},{"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/main-loop/node_modules/error/node_modules/xtend/mutable.js":22}],97:[function(require,module,exports){
-module.exports=require(23)
-},{"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/main-loop/node_modules/error/typed.js":23,"camelize":94,"string-template":95,"xtend/mutable":96}],98:[function(require,module,exports){
-module.exports=require(37)
-},{"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-thunk.js":37}],99:[function(require,module,exports){
-module.exports=require(38)
-},{"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-vhook.js":38}],100:[function(require,module,exports){
-module.exports=require(39)
-},{"./version":103,"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-vnode.js":39}],101:[function(require,module,exports){
-module.exports=require(40)
-},{"./version":103,"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-vtext.js":40}],102:[function(require,module,exports){
-module.exports=require(41)
-},{"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-widget.js":41}],103:[function(require,module,exports){
-module.exports=require(44)
-},{"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/main-loop/node_modules/vtree/version.js":44}],104:[function(require,module,exports){
+},{"./hooks/data-set-hook.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/hooks/data-set-hook.js","./hooks/ev-hook.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/hooks/ev-hook.js","./hooks/soft-set-hook.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/hooks/soft-set-hook.js","./parse-tag.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/parse-tag.js","error/typed":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/node_modules/error/typed.js","vtree/is-thunk":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/node_modules/vtree/is-thunk.js","vtree/is-vhook":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/node_modules/vtree/is-vhook.js","vtree/is-vnode":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/node_modules/vtree/is-vnode.js","vtree/is-vtext":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/node_modules/vtree/is-vtext.js","vtree/is-widget":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/node_modules/vtree/is-widget.js","vtree/vnode.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/node_modules/vtree/vnode.js","vtree/vtext.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/node_modules/vtree/vtext.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/node_modules/data-set/index.js":[function(require,module,exports){
+module.exports=require("/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/node_modules/data-set/index.js")
+},{"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/node_modules/data-set/index.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/dom-delegator/node_modules/data-set/index.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/node_modules/error/typed.js":[function(require,module,exports){
+module.exports=require("/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/error/typed.js")
+},{"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/error/typed.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/error/typed.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/node_modules/vtree/is-thunk.js":[function(require,module,exports){
+module.exports=require("/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-thunk.js")
+},{"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-thunk.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-thunk.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/node_modules/vtree/is-vhook.js":[function(require,module,exports){
+module.exports=require("/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-vhook.js")
+},{"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-vhook.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-vhook.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/node_modules/vtree/is-vnode.js":[function(require,module,exports){
+module.exports=require("/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-vnode.js")
+},{"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-vnode.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-vnode.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/node_modules/vtree/is-vtext.js":[function(require,module,exports){
+module.exports=require("/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-vtext.js")
+},{"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-vtext.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-vtext.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/node_modules/vtree/is-widget.js":[function(require,module,exports){
+module.exports=require("/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-widget.js")
+},{"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-widget.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-widget.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/node_modules/vtree/version.js":[function(require,module,exports){
+module.exports=require("/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/version.js")
+},{"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/version.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/version.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/node_modules/vtree/vnode.js":[function(require,module,exports){
 var version = require("./version")
 var isVNode = require("./is-vnode")
 var isWidget = require("./is-widget")
@@ -3841,7 +4435,7 @@ function VirtualNode(tagName, properties, children, key, namespace) {
 VirtualNode.prototype.version = version
 VirtualNode.prototype.type = "VirtualNode"
 
-},{"./is-vhook":99,"./is-vnode":100,"./is-widget":102,"./version":103}],105:[function(require,module,exports){
+},{"./is-vhook":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/node_modules/vtree/is-vhook.js","./is-vnode":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/node_modules/vtree/is-vnode.js","./is-widget":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/node_modules/vtree/is-widget.js","./version":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/node_modules/vtree/version.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/node_modules/vtree/vtext.js":[function(require,module,exports){
 var version = require("./version")
 
 module.exports = VirtualText
@@ -3853,7 +4447,7 @@ function VirtualText(text) {
 VirtualText.prototype.version = version
 VirtualText.prototype.type = "VirtualText"
 
-},{"./version":103}],106:[function(require,module,exports){
+},{"./version":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/node_modules/vtree/version.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/parse-tag.js":[function(require,module,exports){
 var classIdSplit = /([\.#]?[a-zA-Z0-9_:-]+)/
 var notClassId = /^\.|#/
 
@@ -3904,7 +4498,7 @@ function parseTag(tag, props) {
     return tagName ? tagName.toLowerCase() : "div"
 }
 
-},{}],107:[function(require,module,exports){
+},{}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/svg.js":[function(require,module,exports){
 var h = require("./index.js")
 
 var BLACKLISTED_KEYS = {
@@ -3958,29 +4552,28 @@ function isChildren(x) {
     return typeof x === "string" || Array.isArray(x)
 }
 
-},{"./index.js":88}],108:[function(require,module,exports){
-module.exports=require(35)
-},{"./handle-thunk":109,"./is-thunk":110,"./is-vhook":111,"./is-vnode":112,"./is-vtext":113,"./is-widget":114,"./vpatch":118,"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/main-loop/node_modules/vtree/diff.js":35,"is-object":115,"x-is-array":116}],109:[function(require,module,exports){
-module.exports=require(36)
-},{"./is-thunk":110,"./is-vnode":112,"./is-vtext":113,"./is-widget":114,"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/main-loop/node_modules/vtree/handle-thunk.js":36}],110:[function(require,module,exports){
-module.exports=require(37)
-},{"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-thunk.js":37}],111:[function(require,module,exports){
-module.exports=require(38)
-},{"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-vhook.js":38}],112:[function(require,module,exports){
-module.exports=require(39)
-},{"./version":117,"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-vnode.js":39}],113:[function(require,module,exports){
-module.exports=require(40)
-},{"./version":117,"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-vtext.js":40}],114:[function(require,module,exports){
-module.exports=require(41)
-},{"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/main-loop/node_modules/vtree/is-widget.js":41}],115:[function(require,module,exports){
-module.exports=require(30)
-},{"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/main-loop/node_modules/vdom/node_modules/is-object/index.js":30}],116:[function(require,module,exports){
-module.exports=require(31)
-},{"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/main-loop/node_modules/vdom/node_modules/x-is-array/index.js":31}],117:[function(require,module,exports){
-module.exports=require(44)
-},{"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/main-loop/node_modules/vtree/version.js":44}],118:[function(require,module,exports){
-module.exports=require(45)
-},{"./version":117,"/home/joelv/play/hyper-script/node_modules/mercury/node_modules/main-loop/node_modules/vtree/vpatch.js":45}],119:[function(require,module,exports){
+},{"./index.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/virtual-hyperscript/index.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/vtree/diff.js":[function(require,module,exports){
+module.exports=require("/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/diff.js")
+},{"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/diff.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/main-loop/node_modules/vtree/diff.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/xtend/immutable.js":[function(require,module,exports){
+module.exports=require("/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-varhash/node_modules/xtend/index.js")
+},{"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-varhash/node_modules/xtend/index.js":"/home/action/play/mercury-todo/node_modules/mercury/node_modules/observ-varhash/node_modules/xtend/index.js"}],"/home/action/play/mercury-todo/node_modules/mercury/node_modules/xtend/mutable.js":[function(require,module,exports){
+module.exports = extend
+
+function extend(target) {
+    for (var i = 1; i < arguments.length; i++) {
+        var source = arguments[i]
+
+        for (var key in source) {
+            if (source.hasOwnProperty(key)) {
+                target[key] = source[key]
+            }
+        }
+    }
+
+    return target
+}
+
+},{}],"/home/action/play/mercury-todo/node_modules/underscore/underscore.js":[function(require,module,exports){
 //     Underscore.js 1.7.0
 //     http://underscorejs.org
 //     (c) 2009-2014 Jeremy Ashkenas, DocumentCloud and Investigative Reporters & Editors
@@ -5397,7 +5990,7 @@ module.exports=require(45)
   }
 }.call(this));
 
-},{}],120:[function(require,module,exports){
+},{}],"/home/action/play/mercury-todo/node_modules/uuid/rng-browser.js":[function(require,module,exports){
 (function (global){
 
 var rng;
@@ -5432,7 +6025,7 @@ module.exports = rng;
 
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],121:[function(require,module,exports){
+},{}],"/home/action/play/mercury-todo/node_modules/uuid/uuid.js":[function(require,module,exports){
 //     uuid.js
 //
 //     Copyright (c) 2010-2012 Robert Kieffer
@@ -5617,94 +6210,4 @@ uuid.unparse = unparse;
 
 module.exports = uuid;
 
-},{"./rng":120}],122:[function(require,module,exports){
-
-},{}],123:[function(require,module,exports){
-// shim for using process in browser
-
-var process = module.exports = {};
-
-process.nextTick = (function () {
-    var canSetImmediate = typeof window !== 'undefined'
-    && window.setImmediate;
-    var canMutationObserver = typeof window !== 'undefined'
-    && window.MutationObserver;
-    var canPost = typeof window !== 'undefined'
-    && window.postMessage && window.addEventListener
-    ;
-
-    if (canSetImmediate) {
-        return function (f) { return window.setImmediate(f) };
-    }
-
-    var queue = [];
-
-    if (canMutationObserver) {
-        var hiddenDiv = document.createElement("div");
-        var observer = new MutationObserver(function () {
-            var queueList = queue.slice();
-            queue.length = 0;
-            queueList.forEach(function (fn) {
-                fn();
-            });
-        });
-
-        observer.observe(hiddenDiv, { attributes: true });
-
-        return function nextTick(fn) {
-            if (!queue.length) {
-                hiddenDiv.setAttribute('yes', 'no');
-            }
-            queue.push(fn);
-        };
-    }
-
-    if (canPost) {
-        window.addEventListener('message', function (ev) {
-            var source = ev.source;
-            if ((source === window || source === null) && ev.data === 'process-tick') {
-                ev.stopPropagation();
-                if (queue.length > 0) {
-                    var fn = queue.shift();
-                    fn();
-                }
-            }
-        }, true);
-
-        return function nextTick(fn) {
-            queue.push(fn);
-            window.postMessage('process-tick', '*');
-        };
-    }
-
-    return function nextTick(fn) {
-        setTimeout(fn, 0);
-    };
-})();
-
-process.title = 'browser';
-process.browser = true;
-process.env = {};
-process.argv = [];
-
-function noop() {}
-
-process.on = noop;
-process.addListener = noop;
-process.once = noop;
-process.off = noop;
-process.removeListener = noop;
-process.removeAllListeners = noop;
-process.emit = noop;
-
-process.binding = function (name) {
-    throw new Error('process.binding is not supported');
-};
-
-// TODO(shtylman)
-process.cwd = function () { return '/' };
-process.chdir = function (dir) {
-    throw new Error('process.chdir is not supported');
-};
-
-},{}]},{},[1]);
+},{"./rng":"/home/action/play/mercury-todo/node_modules/uuid/rng-browser.js"}]},{},["/home/action/play/mercury-todo/index.js"]);
